@@ -1,153 +1,136 @@
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
+const path = require("path");
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-app.use(express.static(__dirname));
+const PORT = process.env.PORT || 3000;
 
-const WORDS = [
-  "موز",
-  "تفاح",
-  "سيارة",
-  "قلم",
-  "شجرة",
-  "كتاب",
-  "هاتف",
-  "كمبيوتر",
-  "كرة",
-  "طائرة",
-]; // يمكنك إضافة كلمات أكثر
+app.use(express.static(path.join(__dirname, "public")));
 
-let players = {};
-let spyId = null;
-let word = null;
+let players = [];
 let hints = [];
-let votes = {};
-let gameStarted = false;
+let spyId = null;
+let word = "";
+let roundStarted = false;
 
-function chooseWord() {
-  const idx = Math.floor(Math.random() * WORDS.length);
-  return WORDS[idx];
-}
+const words = [
+  "مكتبة", "سيارة", "تفاحة", "هاتف", "نهر", "قمر", "قطار", "مستشفى", "كرسي", "شباك"
+];
 
-function chooseSpy() {
-  const playerIds = Object.keys(players);
-  if (playerIds.length === 0) return null;
-  const idx = Math.floor(Math.random() * playerIds.length);
-  return playerIds[idx];
-}
-
-function resetRound() {
-  hints = [];
-  votes = {};
-  spyId = chooseSpy();
-  word = chooseWord();
-  gameStarted = true;
-
-  io.emit("start-game", { spyId, word });
-}
-
-function allHintsSubmitted() {
-  return Object.keys(players).length === hints.length;
-}
-
-function allVotesSubmitted() {
-  return Object.keys(players).length === Object.keys(votes).length;
-}
-
-function calculateResult() {
-  const voteCount = {};
-  for (const v of Object.values(votes)) {
-    voteCount[v] = (voteCount[v] || 0) + 1;
+function startGame() {
+  if (players.length < 3) {
+    io.emit("chat-message", { name: "النظام", message: "⚠️ اللعبة تحتاج 3 لاعبين على الأقل لبدء الجولة." });
+    return;
   }
 
+  hints = [];
+  roundStarted = true;
+
+  const randomIndex = Math.floor(Math.random() * players.length);
+  spyId = players[randomIndex].id;
+
+  word = words[Math.floor(Math.random() * words.length)];
+
+  io.emit("start-game", {
+    spyId,
+    word,
+  });
+}
+
+function endRound() {
+  const votes = {};
+
+  players.forEach(p => {
+    p.vote && (votes[p.vote] = (votes[p.vote] || 0) + 1);
+  });
+
   let maxVotes = 0;
-  let suspectedSpy = null;
-  for (const playerId in voteCount) {
-    if (voteCount[playerId] > maxVotes) {
-      maxVotes = voteCount[playerId];
-      suspectedSpy = playerId;
+  let votedOutId = null;
+
+  for (const id in votes) {
+    if (votes[id] > maxVotes) {
+      maxVotes = votes[id];
+      votedOutId = id;
     }
   }
 
-  const spyCaught = suspectedSpy === spyId;
   let message = "";
-
-  if (spyCaught) {
-    message = `✅ تم كشف العميل السري! اللاعب ${players[spyId].name} خسر الجولة.`;
+  if (votedOutId === spyId) {
+    const spyName = players.find(p => p.id === spyId)?.name || "العميل";
+    message = `🎉 تم كشف العميل (${spyName})!`;
   } else {
-    message = `❌ العميل السري ${players[spyId].name} لم يُكشف وفاز بالجولة!`;
+    const realSpyName = players.find(p => p.id === spyId)?.name || "العميل";
+    message = `😈 فشلتم في كشف العميل! العميل كان: ${realSpyName}`;
   }
 
-  return { spyCaught, message };
+  io.emit("show-result", { message });
+
+  players.forEach(p => {
+    p.vote = null;
+  });
+
+  setTimeout(() => {
+    roundStarted = false;
+    startGame();
+  }, 5000);
 }
 
 io.on("connection", (socket) => {
-  console.log("مستخدم جديد:", socket.id);
+  console.log("مستخدم متصل:", socket.id);
 
   socket.on("set-name", (name) => {
-    players[socket.id] = { id: socket.id, name, score: 0 };
+    players.push({ id: socket.id, name, vote: null });
     socket.emit("connected", { id: socket.id });
-
-    io.emit("update-players", Object.values(players)); // تحديث قائمة اللاعبين للجميع
-
-    if (Object.keys(players).length >= 2 && !gameStarted) {
-      resetRound();
-    }
+    io.emit("update-players", players);
+    if (!roundStarted) startGame();
   });
 
   socket.on("submit-hint", (hint) => {
-    if (!gameStarted) return;
-    if (hints.find(h => h.id === socket.id)) return;
+    if (!roundStarted) return;
+    const player = players.find(p => p.id === socket.id);
+    if (player && !hints.find(h => h.id === socket.id)) {
+      hints.push({ id: socket.id, name: player.name, hint });
+    }
 
-    hints.push({ id: socket.id, name: players[socket.id].name, hint });
-
-    if (allHintsSubmitted()) {
-      io.emit("show-hints", { hints, players: Object.values(players) });
+    if (hints.length === players.length - 1) {
+      io.emit("show-hints", { hints, players });
     }
   });
 
-  socket.on("vote-spy", (votedId) => {
-    if (!gameStarted) return;
-    if (votes[socket.id]) return;
-
-    if (votedId === socket.id) return; // منع التصويت على نفسك
-
-    votes[socket.id] = votedId;
-
-    if (allVotesSubmitted()) {
-      const result = calculateResult();
-      io.emit("show-result", result);
-
-      setTimeout(() => {
-        resetRound();
-      }, 10000);
+  socket.on("vote-spy", (targetId) => {
+    if (!roundStarted) return;
+    const player = players.find(p => p.id === socket.id);
+    if (player && !player.vote) {
+      player.vote = targetId;
     }
+
+    const allVoted = players.filter(p => p.id !== spyId).every(p => p.vote);
+    if (allVoted) endRound();
   });
 
   socket.on("chat-message", (msg) => {
-    const player = players[socket.id];
-    if (!player) return;
-    io.emit("chat-message", { name: player.name, message: msg });
+    const player = players.find(p => p.id === socket.id);
+    if (player) {
+      io.emit("chat-message", { name: player.name, message: msg });
+    }
   });
 
   socket.on("disconnect", () => {
-    console.log("انقطع الاتصال:", socket.id);
-    delete players[socket.id];
+    players = players.filter(p => p.id !== socket.id);
+    io.emit("update-players", players);
 
-    io.emit("update-players", Object.values(players)); // تحديث قائمة اللاعبين
-
-    if (Object.keys(players).length < 2) {
-      gameStarted = false;
-      io.emit("show-result", { message: "تم إيقاف اللعبة بسبب نقص اللاعبين." });
+    if (socket.id === spyId) {
+      roundStarted = false;
+      io.emit("chat-message", { name: "النظام", message: "👤 العميل غادر اللعبة. جاري بدء جولة جديدة..." });
+      setTimeout(() => startGame(), 2000);
     }
   });
 });
 
-const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`السيرفر يعمل على http://localhost:${PORT}`);
+  console.log(`الخادم يعمل على المنفذ ${PORT}`);
 });
