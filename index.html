@@ -140,7 +140,7 @@
 <body>
 
 <div id="loginScreen">
-  <h2>أدخل اسمك للانضمام</h2>
+  <h2> اسمك </h2>
   <input id="nameInput" type="text" placeholder="اسمك" autocomplete="off" />
   <button id="enterGameBtn" disabled>دخول</button>
 </div>
@@ -247,7 +247,7 @@
   submitHint.addEventListener("click", () => {
     const hint = hintInput.value.trim();
     if (hint.length === 0 || hint.includes(" ")) {
-      alert("يجب أن تكون كلمة واحدة فقط!");
+      alert("كلمة واحدة فقط");
       return;
     }
     socket.emit("submit-hint", hint);
