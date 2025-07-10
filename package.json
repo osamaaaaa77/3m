@@ -1,0 +1,25 @@
+{
+  "name": "spy-game",
+  "version": "1.0.0",
+  "description": "لعبة العميل السري أونلاين",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.1"
+  },
+  "engines": {
+    "node": "18.x"
+  },
+  "keywords": [
+    "game",
+    "spy",
+    "online",
+    "socket.io",
+    "express"
+  ],
+  "author": "اسامة",
+  "license": "MIT"
+}
