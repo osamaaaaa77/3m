@@ -19,14 +19,7 @@ const WORDS = [
   "كمبيوتر",
   "كرة",
   "طائرة",
-  "طاولة",
-  "كرسي",
-  "شاي",
-  "قهوة",
-  "قميص,
-  "بحر",
-  "ملعقة",
-];
+]; // يمكنك إضافة كلمات أكثر
 
 let players = {};
 let spyId = null;
@@ -99,7 +92,7 @@ io.on("connection", (socket) => {
     players[socket.id] = { id: socket.id, name, score: 0 };
     socket.emit("connected", { id: socket.id });
 
-    io.emit("update-players", Object.values(players));
+    io.emit("update-players", Object.values(players)); // تحديث قائمة اللاعبين للجميع
 
     if (Object.keys(players).length >= 2 && !gameStarted) {
       resetRound();
