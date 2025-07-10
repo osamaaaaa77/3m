@@ -19,7 +19,7 @@ const WORDS = [
   "كمبيوتر",
   "كرة",
   "طائرة",
-]; // ممكن تضيف كلمات أكثر
+]; // يمكنك إضافة كلمات أكثر
 
 let players = {};
 let spyId = null;
@@ -59,13 +59,11 @@ function allVotesSubmitted() {
 }
 
 function calculateResult() {
-  // عدد الأصوات لكل لاعب
   const voteCount = {};
   for (const v of Object.values(votes)) {
     voteCount[v] = (voteCount[v] || 0) + 1;
   }
 
-  // اللاعب صاحب أكبر عدد أصوات
   let maxVotes = 0;
   let suspectedSpy = null;
   for (const playerId in voteCount) {
@@ -88,13 +86,14 @@ function calculateResult() {
 }
 
 io.on("connection", (socket) => {
-  console.log("مستخدم جديد متصل:", socket.id);
+  console.log("مستخدم جديد:", socket.id);
 
   socket.on("set-name", (name) => {
     players[socket.id] = { id: socket.id, name, score: 0 };
     socket.emit("connected", { id: socket.id });
 
-    // إذا صار عدد اللاعبين 2 أو أكثر ونفس الوقت ما في جولة شغالة نبدأ جولة جديدة
+    io.emit("update-players", Object.values(players)); // تحديث قائمة اللاعبين للجميع
+
     if (Object.keys(players).length >= 2 && !gameStarted) {
       resetRound();
     }
@@ -102,11 +101,10 @@ io.on("connection", (socket) => {
 
   socket.on("submit-hint", (hint) => {
     if (!gameStarted) return;
-    if (hints.find(h => h.id === socket.id)) return; // منع تكرار التلميح
+    if (hints.find(h => h.id === socket.id)) return;
 
     hints.push({ id: socket.id, name: players[socket.id].name, hint });
 
-    // إذا كتبوا كلهم، نرسل التلميحات للكل ونفتح التصويت
     if (allHintsSubmitted()) {
       io.emit("show-hints", { hints, players: Object.values(players) });
     }
@@ -114,7 +112,9 @@ io.on("connection", (socket) => {
 
   socket.on("vote-spy", (votedId) => {
     if (!gameStarted) return;
-    if (votes[socket.id]) return; // صوت واحد لكل لاعب
+    if (votes[socket.id]) return;
+
+    if (votedId === socket.id) return; // منع التصويت على نفسك
 
     votes[socket.id] = votedId;
 
@@ -122,7 +122,6 @@ io.on("connection", (socket) => {
       const result = calculateResult();
       io.emit("show-result", result);
 
-      // ابدأ جولة جديدة بعد 10 ثواني
       setTimeout(() => {
         resetRound();
       }, 10000);
@@ -136,18 +135,19 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    console.log("مستخدم قطع الاتصال:", socket.id);
+    console.log("انقطع الاتصال:", socket.id);
     delete players[socket.id];
 
-    // إذا نقص اللاعبين تحت 2، نوقف اللعبة
+    io.emit("update-players", Object.values(players)); // تحديث قائمة اللاعبين
+
     if (Object.keys(players).length < 2) {
       gameStarted = false;
-      io.emit("show-result", { message: "توقف اللعب بسبب نقص اللاعبين." });
+      io.emit("show-result", { message: "تم إيقاف اللعبة بسبب نقص اللاعبين." });
     }
   });
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`الخادم شغال على http://localhost:${PORT}`);
+  console.log(`السيرفر يعمل على http://localhost:${PORT}`);
 });
