@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
+>
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>لعبة العميل </title>
+<title>لعبة العميل السري</title>
 <style>
   body {
     font-family: Arial, sans-serif;
@@ -222,7 +223,8 @@
   });
 
   socket.on("start-game", (data) => {
-    voted = false;
+    voted = false; // ← هذا السطر المهم
+
     hintInput.value = "";
     hintsList.style.display = "none";
     hintsList.innerHTML = "";
