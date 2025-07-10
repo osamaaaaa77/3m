@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>لعبة  زيزو</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background: #f9f9f9;
+    margin: 0; padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    direction: rtl;
+  }
+  #loginScreen, #gameScreen {
+    width: 95%;
+    max-width: 400px;
+    margin-top: 40px;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 0 10px #ccc;
+    padding: 20px;
+  }
+  #loginScreen {
+    display: block;
+    text-align: center;
+  }
+  #gameScreen {
+    display: none;
+    flex-direction: column;
+  }
+  h2 {
+    margin-bottom: 15px;
+  }
+  input[type=text] {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 15px;
+    font-size: 16px;
+    box-sizing: border-box;
+    border: 1px solid #aaa;
+    border-radius: 4px;
+  }
+  button {
+    width: 100%;
+    padding: 10px;
+    background: #007bff;
+    color: white;
+    font-size: 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  button:disabled {
+    background: #ccc;
+    cursor: default;
+  }
+  #wordInfo {
+    font-size: 18px;
+    margin-bottom: 15px;
+    min-height: 30px;
+  }
+  #hintSection {
+    margin-bottom: 15px;
+  }
+  #hintInput {
+    width: 100%;
+    padding: 10px;
+    font-size: 16px;
+  }
+  #submitHint {
+    margin-top: 10px;
+  }
+  #hintsList {
+    margin-bottom: 15px;
+    max-height: 120px;
+    overflow-y: auto;
+    background: #ffe6f0;
+    border: 1px solid #ccc;
+    padding: 10px;
+    font-size: 14px;
+    border-radius: 4px;
+  }
+  #voteSection {
+    margin-bottom: 15px;
+  }
+  #playersList {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  #playersList li {
+    padding: 8px;
+    background: #f1f1f1;
+    margin-bottom: 5px;
+    cursor: pointer;
+    border-radius: 4px;
+  }
+  #playersList li:hover {
+    background: #d6e9ff;
+  }
+  #resultMessage {
+    font-size: 16px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    min-height: 24px;
+  }
+  #chat {
+    background: #ffe6f0;
+    border: 1px solid #ccc;
+    height: 130px;
+    overflow-y: auto;
+    padding: 10px;
+    font-size: 14px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+  }
+  #chatInput {
+    width: 100%;
+    padding: 10px;
+    font-size: 16px;
+    box-sizing: border-box;
+    border-radius: 4px;
+    border: 1px solid #aaa;
+  }
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <h2> اسمك </h2>
+  <input id="nameInput" type="text" placeholder="اسمك" autocomplete="off" />
+  <button id="enterGameBtn" disabled>دخول</button>
+</div>
+
+<div id="gameScreen">
+
+  <h2>لعبة العميل السري</h2>
+
+  <div id="wordInfo"></div>
+
+  <div id="hintSection">
+    <input id="hintInput" type="text" placeholder="أدخل كلمة تلميح (كلمة واحدة)" autocomplete="off" disabled />
+    <button id="submitHint" disabled>إرسال التلميح</button>
+  </div>
+
+  <div id="hintsList" style="display:none;"></div>
+
+  <div id="voteSection" style="display:none;">
+    <p>من تعتقد أنه العميل؟ اضغط على الاسم للتصويت</p>
+    <ul id="playersList"></ul>
+  </div>
+
+  <div id="resultMessage"></div>
+
+  <div id="chat"></div>
+  <input id="chatInput" type="text" placeholder="اكتب رسالة واضغط Enter" autocomplete="off" />
+
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="client.js"></script>
+
+<script>
+  const nameInput = document.getElementById("nameInput");
+  const enterGameBtn = document.getElementById("enterGameBtn");
+  const loginScreen = document.getElementById("loginScreen");
+  const gameScreen = document.getElementById("gameScreen");
+  const wordInfo = document.getElementById("wordInfo");
+  const hintInput = document.getElementById("hintInput");
+  const submitHint = document.getElementById("submitHint");
+  const hintsList = document.getElementById("hintsList");
+  const voteSection = document.getElementById("voteSection");
+  const playersList = document.getElementById("playersList");
+  const resultMessage = document.getElementById("resultMessage");
+  const chat = document.getElementById("chat");
+  const chatInput = document.getElementById("chatInput");
+
+  let socket = io();
+  let myId = null;
+  let myName = "";
+  let isSpy = false;
+  let canSubmitHint = false;
+  let voted = false;
+
+  nameInput.addEventListener("input", () => {
+    enterGameBtn.disabled = nameInput.value.trim().length === 0;
+  });
+
+  enterGameBtn.addEventListener("click", () => {
+    myName = nameInput.value.trim();
+    if (!myName) return;
+    socket.emit("set-name", myName);
+  });
+
+  socket.on("connected", (data) => {
+    myId = data.id;
+  });
+
+  socket.on("start-game", (data) => {
+    loginScreen.style.display = "none";
+    gameScreen.style.display = "flex";
+    voted = false;
+    canSubmitHint = true;
+    hintInput.value = "";
+    hintsList.style.display = "none";
+    hintsList.innerHTML = "";
+    voteSection.style.display = "none";
+    resultMessage.textContent = "";
+    hintInput.disabled = false;
+    submitHint.disabled = false;
+
+    if (data.spyId === myId) {
+      isSpy = true;
+      wordInfo.textContent = "🕵️‍♂️ أنت العميل السري! حاول أن تندمج بدون أن يُكشف أمرك.";
+    } else {
+      isSpy = false;
+      wordInfo.textContent = `🔒 الكلمة السرية: ${data.word}`;
+    }
+  });
+
+  submitHint.addEventListener("click", () => {
+    const hint = hintInput.value.trim();
+    if (hint.length === 0 || hint.includes(" ")) {
+      alert("يجب أن تكون كلمة واحدة فقط!");
+      return;
+    }
+    socket.emit("submit-hint", hint);
+    hintInput.value = "";
+    hintInput.disabled = true;
+    submitHint.disabled = true;
+  });
+
+  socket.on("show-hints", (data) => {
+    hintsList.style.display = "block";
+    hintsList.innerHTML = "";
+    data.hints.forEach(item => {
+      hintsList.innerHTML += `<div><strong>${item.name}:</strong> ${item.hint}</div>`;
+    });
+    voteSection.style.display = "block";
+
+    // عرض قائمة اللاعبين للتصويت
+    playersList.innerHTML = "";
+    data.players.forEach(p => {
+      const li = document.createElement("li");
+      li.textContent = p.name;
+      li.dataset.id = p.id;
+      li.addEventListener("click", () => {
+        if (!voted) {
+          socket.emit("vote-spy", p.id);
+          voted = true;
+          resultMessage.textContent = "تم التصويت، انتظر النتائج...";
+          voteSection.style.pointerEvents = "none";
+        }
+      });
+      playersList.appendChild(li);
+    });
+
+    hintInput.disabled = true;
+    submitHint.disabled = true;
+  });
+
+  socket.on("show-result", (data) => {
+    voteSection.style.display = "none";
+    resultMessage.textContent = data.message;
+  });
+
+  // الشات
+  chatInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      const msg = chatInput.value.trim();
+      if (msg.length > 0) {
+        socket.emit("chat-message", msg);
+        chatInput.value = "";
+      }
+    }
+  });
+
+  socket.on("chat-message", (data) => {
+    const div = document.createElement("div");
+    div.textContent = `${data.name}: ${data.message}`;
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+  });
+
+  socket.on("disconnect", () => {
+    alert("تم قطع الاتصال بالخادم");
+    location.reload();
+  });
+</script>
+
+</body>
+</html>
