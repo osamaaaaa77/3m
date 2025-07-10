@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>لعبة زيزو </title>
+<title>لعبة العميل السري</title>
 <style>
   body {
     font-family: Arial, sans-serif;
@@ -102,6 +102,13 @@
   #playersList li:hover {
     background: #d6e9ff;
   }
+  #playerNamesBox {
+    background: #e7f3ff;
+    border: 1px solid #ccc;
+    padding: 10px;
+    margin-bottom: 15px;
+    border-radius: 4px;
+  }
   #resultMessage {
     font-size: 16px;
     font-weight: bold;
@@ -142,6 +149,11 @@
 
   <div id="wordInfo"></div>
 
+  <div id="playerNamesBox">
+    <strong>اللاعبون:</strong>
+    <ul id="playerNames" style="padding-right: 20px; list-style-type: circle;"></ul>
+  </div>
+
   <div id="hintSection">
     <input id="hintInput" type="text" placeholder="أدخل كلمة تلميح (كلمة واحدة)" autocomplete="off" disabled />
     <button id="submitHint" disabled>إرسال التلميح</button>
@@ -175,6 +187,7 @@
   const hintsList = document.getElementById("hintsList");
   const voteSection = document.getElementById("voteSection");
   const playersList = document.getElementById("playersList");
+  const playerNames = document.getElementById("playerNames");
   const resultMessage = document.getElementById("resultMessage");
   const chat = document.getElementById("chat");
   const chatInput = document.getElementById("chatInput");
@@ -197,6 +210,15 @@
     myId = data.id;
     loginScreen.style.display = "none";
     gameScreen.style.display = "flex";
+  });
+
+  socket.on("update-players", (players) => {
+    playerNames.innerHTML = "";
+    players.forEach(p => {
+      const li = document.createElement("li");
+      li.textContent = p.name;
+      playerNames.appendChild(li);
+    });
   });
 
   socket.on("start-game", (data) => {
@@ -240,6 +262,7 @@
 
     playersList.innerHTML = "";
     data.players.forEach(p => {
+      if (p.id === myId) return; // لا تصوّت لنفسك
       const li = document.createElement("li");
       li.textContent = p.name;
       li.dataset.id = p.id;
