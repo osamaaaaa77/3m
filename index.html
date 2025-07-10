@@ -131,7 +131,7 @@
 <body>
 
 <div id="loginScreen">
-  <h2> اسمك </h2>
+  <h2>أدخل اسمك للانضمام</h2>
   <input id="nameInput" type="text" placeholder="اسمك" autocomplete="off" />
   <button id="enterGameBtn" disabled>دخول</button>
 </div>
@@ -162,14 +162,127 @@
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
-<script src="client.js"></script>
-
 <script>
+  const socket = io();
+
   const nameInput = document.getElementById("nameInput");
   const enterGameBtn = document.getElementById("enterGameBtn");
+  const loginScreen = document.getElementById("loginScreen");
+  const gameScreen = document.getElementById("gameScreen");
+  const wordInfo = document.getElementById("wordInfo");
+  const hintInput = document.getElementById("hintInput");
+  const submitHint = document.getElementById("submitHint");
+  const hintsList = document.getElementById("hintsList");
+  const voteSection = document.getElementById("voteSection");
+  const playersList = document.getElementById("playersList");
+  const resultMessage = document.getElementById("resultMessage");
+  const chat = document.getElementById("chat");
+  const chatInput = document.getElementById("chatInput");
+
+  let myId = null;
+  let isSpy = false;
+  let voted = false;
 
   nameInput.addEventListener("input", () => {
     enterGameBtn.disabled = nameInput.value.trim().length === 0;
+  });
+
+  enterGameBtn.addEventListener("click", () => {
+    const name = nameInput.value.trim();
+    if (!name) return;
+    socket.emit("set-name", name);
+  });
+
+  socket.on("connected", (data) => {
+    myId = data.id;
+    loginScreen.style.display = "none";
+    gameScreen.style.display = "flex";
+  });
+
+  socket.on("start-game", (data) => {
+    voted = false;
+    hintInput.value = "";
+    hintsList.style.display = "none";
+    hintsList.innerHTML = "";
+    voteSection.style.display = "none";
+    resultMessage.textContent = "";
+    hintInput.disabled = false;
+    submitHint.disabled = false;
+
+    if (data.spyId === myId) {
+      isSpy = true;
+      wordInfo.textContent = "🕵️‍♂️ أنت العميل السري! حاول أن تندمج بدون أن يُكشف أمرك.";
+    } else {
+      isSpy = false;
+      wordInfo.textContent = `🔒 الكلمة السرية: ${data.word}`;
+    }
+  });
+
+  submitHint.addEventListener("click", () => {
+    const hint = hintInput.value.trim();
+    if (hint.length === 0 || hint.includes(" ")) {
+      alert("يجب أن تكون كلمة واحدة فقط!");
+      return;
+    }
+    socket.emit("submit-hint", hint);
+    hintInput.value = "";
+    hintInput.disabled = true;
+    submitHint.disabled = true;
+  });
+
+  socket.on("show-hints", (data) => {
+    hintsList.style.display = "block";
+    hintsList.innerHTML = "";
+    data.hints.forEach(item => {
+      hintsList.innerHTML += `<div><strong>${item.name}:</strong> ${item.hint}</div>`;
+    });
+    voteSection.style.display = "block";
+
+    playersList.innerHTML = "";
+    data.players.forEach(p => {
+      const li = document.createElement("li");
+      li.textContent = p.name;
+      li.dataset.id = p.id;
+      li.addEventListener("click", () => {
+        if (!voted) {
+          socket.emit("vote-spy", p.id);
+          voted = true;
+          resultMessage.textContent = "تم التصويت، انتظر النتائج...";
+          voteSection.style.pointerEvents = "none";
+        }
+      });
+      playersList.appendChild(li);
+    });
+
+    hintInput.disabled = true;
+    submitHint.disabled = true;
+  });
+
+  socket.on("show-result", (data) => {
+    voteSection.style.display = "none";
+    resultMessage.textContent = data.message;
+  });
+
+  chatInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      const msg = chatInput.value.trim();
+      if (msg.length > 0) {
+        socket.emit("chat-message", msg);
+        chatInput.value = "";
+      }
+    }
+  });
+
+  socket.on("chat-message", (data) => {
+    const div = document.createElement("div");
+    div.textContent = `${data.name}: ${data.message}`;
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+  });
+
+  socket.on("disconnect", () => {
+    alert("تم قطع الاتصال بالخادم");
+    location.reload();
   });
 </script>
 
